@@ -1,0 +1,162 @@
+#cloud-config
+# C-Bridge Cloud-Init Configuration
+
+hostname: cbridge1
+
+# -----------------------------
+# Package setup
+# -----------------------------
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+  - wget
+  - git
+  - vim
+  - htop
+
+# -----------------------------
+# Write required files
+# -----------------------------
+write_files:
+
+  # First boot script
+  - path: /usr/local/bin/cbridge-first-boot.sh
+    permissions: '0755'
+    owner: root:root
+    content: |
+      #!/bin/bash
+      set -e
+
+      LOG_FILE="/var/log/cbridge-first-boot.log"
+      STATE_FILE="/var/lib/cbridge/first-boot-complete"
+      REPO_URL="https://raw.githubusercontent.com/sandeep-samosys213/lern-docker/refs/heads/main"
+      SETUP_SCRIPT_URL="$REPO_URL/setup_script"
+
+      log() {
+          echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+      }
+
+      if [ -f "$STATE_FILE" ]; then
+          log "First boot already completed. Skipping."
+          exit 0
+      fi
+
+      log "=== C-Bridge First Boot Setup ==="
+
+      mkdir -p /var/lib/cbridge
+      mkdir -p "$(dirname "$LOG_FILE")"
+
+      log "Waiting for network..."
+
+      for i in {1..60}; do
+          if ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1; then
+              log "Network ready"
+              break
+          fi
+          sleep 2
+      done
+
+      if ! ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1; then
+          log "ERROR: Network not available"
+          exit 1
+      fi
+
+      log "Downloading setup script and repository..."
+
+      # Create app directory
+      APP_DIR="/home/$USER/C-Bridge-Production"
+      mkdir -p "$APP_DIR"
+      cd "$APP_DIR"
+
+      # Download setup script
+      curl -fsSL "$SETUP_SCRIPT_URL" -o setup_script || {
+          log "ERROR: Failed to download setup script"
+          exit 1
+      }
+
+      chmod +x setup_script
+
+      # Download essential SoftAP scripts (needed before setup_script runs)
+      mkdir -p scripts/softap
+      curl -fsSL "$REPO_URL/scripts/softap/setup-softap.sh" -o scripts/softap/setup-softap.sh || {
+          log "Warning: Failed to download setup-softap.sh"
+      }
+      curl -fsSL "$REPO_URL/scripts/softap/auto-ap.sh" -o scripts/softap/auto-ap.sh || {
+          log "Warning: Failed to download auto-ap.sh"
+      }
+      curl -fsSL "$REPO_URL/scripts/softap/wifi-setup-server.js" -o scripts/softap/wifi-setup-server.js || {
+          log "Warning: Failed to download wifi-setup-server.js"
+      }
+      curl -fsSL "$REPO_URL/scripts/softap/cbridge-setup-ap.service" -o scripts/softap/cbridge-setup-ap.service || {
+          log "Warning: Failed to download cbridge-setup-ap.service"
+      }
+      chmod +x scripts/softap/*.sh 2>/dev/null || true
+
+      # Create minimal directory structure (setup_script expects backend/)
+      mkdir -p backend frontend
+
+      log "Running setup script from repository directory..."
+      sudo ./setup_script || {
+          log "ERROR: Setup script failed"
+          exit 1
+      }
+
+      touch "$STATE_FILE"
+
+      log "First boot setup completed successfully!"
+      log "Note: setup_script has installed SoftAP and auto-ap service"
+      log "Auto-ap service will automatically start SoftAP if WiFi is not configured"
+      log "Connect to 'CBridge-Setup' network and visit http://192.168.4.1:8080 to configure WiFi"
+
+  # Systemd service
+  - path: /etc/systemd/system/cbridge-first-boot.service
+    permissions: '0644'
+    owner: root:root
+    content: |
+      [Unit]
+      Description=C-Bridge First Boot Automated Setup
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/cbridge-first-boot.sh
+      RemainAfterExit=yes
+      StandardOutput=journal
+      StandardError=journal
+      TimeoutStartSec=1800
+
+      [Install]
+      WantedBy=multi-user.target
+
+# -----------------------------
+# First boot commands
+# -----------------------------
+runcmd:
+  - systemctl daemon-reexec
+  - systemctl daemon-reload
+  - systemctl enable cbridge-first-boot.service
+  - systemctl start cbridge-first-boot.service
+  - timedatectl set-timezone Asia/Kolkata
+  - systemctl enable ssh
+  - systemctl start ssh
+
+# -----------------------------
+# Final message
+# -----------------------------
+final_message: |
+  C-Bridge First Boot Setup Complete!
+
+  Check logs:
+  /var/log/cbridge-first-boot.log
+
+  State file:
+  /var/lib/cbridge/first-boot-complete
+
+  If WiFi is not configured,
+  connect to "CBridge-Setup"
+  and open:
+
+  http://192.168.4.1:8080

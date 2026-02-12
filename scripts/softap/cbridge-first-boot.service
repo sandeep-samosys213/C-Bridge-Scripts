@@ -1,0 +1,20 @@
+[Unit]
+Description=C-Bridge First Boot Automated Setup
+Documentation=https://github.com/YOUR_ORG/C-Bridge-Production
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/cbridge-first-boot.sh
+RemainAfterExit=yes
+StandardOutput=journal
+StandardError=journal
+TimeoutStartSec=1800
+
+# Restart on failure (optional)
+# Restart=on-failure
+# RestartSec=60
+
+[Install]
+WantedBy=multi-user.target

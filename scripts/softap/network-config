@@ -1,0 +1,53 @@
+# This file contains a netplan-compatible configuration which cloud-init will
+# apply on first-boot (note: it will *not* update the config after the first
+# boot). Please refer to the cloud-init documentation and the netplan reference
+# for full details:
+#
+# https://netplan.io/reference
+# https://cloudinit.readthedocs.io/en/latest/topics/network-config.html
+# https://cloudinit.readthedocs.io/en/latest/topics/network-config-format-v2.html
+#
+# Please note that the YAML format employed by this file is sensitive to
+# differences in whitespace; if you are editing this file in an editor (like
+# Notepad) which uses literal tabs, take care to only use spaces for
+# indentation. See the following link for more details:
+#
+# https://en.wikipedia.org/wiki/YAML
+#
+# Additionally, please be aware that if your boot sequence depends on active
+# networking (e.g. if your cloud-init configuration pulls packages or SSH
+# keys from the network), you *must* mark at least one interface as required
+# ("optional: false") below. Otherwise, particularly on faster boards,
+# cloud-init will start attempting to use the network before it is ready
+
+# C-Bridge Network Configuration for SoftAP Provisioning
+# 
+# IMPORTANT: This config is for FIRST BOOT ONLY (SoftAP mode)
+# - Sets static IP (192.168.4.1) for wlan0 AP interface
+# - NO WiFi client credentials here (configured via provisioning portal)
+# - After WiFi setup, device switches to client mode automatically
+#
+# SoftAP Flow:
+# 1. First boot → AP mode (192.168.4.1) → User connects → Configures WiFi
+# 2. Next boot → Client mode (DHCP from router) → SoftAP disabled
+
+network:
+  version: 2
+  renderer: networkd
+
+  # Ethernet interface (optional - use if available)
+  ethernets:
+    eth0:
+      dhcp4: true
+      optional: true
+
+  # WiFi interface - Static IP for AP mode
+  # NOTE: This is NOT WiFi client config
+  # This assigns IP to wlan0 interface for SoftAP (hostapd/dnsmasq)
+  # WiFi client credentials are configured via provisioning portal
+  wifis:
+    wlan0:
+      dhcp4: false
+      addresses: [192.168.4.1/24]
+      optional: true
+      # NO SSID/password here - configured via http://192.168.4.1:8080
