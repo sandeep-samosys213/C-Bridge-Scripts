@@ -13,8 +13,8 @@ packages:
   - curl
   - wget
   - git
-  - vim
   - htop
+  # vim removed - optional, can install later if needed
 
 # -----------------------------
 # Write required files
@@ -31,7 +31,7 @@ write_files:
 
       LOG_FILE="/var/log/cbridge-first-boot.log"
       STATE_FILE="/var/lib/cbridge/first-boot-complete"
-      REPO_URL="https://raw.githubusercontent.com/sandeep-samosys213/lern-docker/refs/heads/main"
+      REPO_URL="https://raw.githubusercontent.com/sandeep-samosys213/C-Bridge-Scripts/refs/heads/main"  
       SETUP_SCRIPT_URL="$REPO_URL/setup_script"
 
       log() {
@@ -48,19 +48,33 @@ write_files:
       mkdir -p /var/lib/cbridge
       mkdir -p "$(dirname "$LOG_FILE")"
 
-      log "Waiting for network..."
-
-      for i in {1..60}; do
-          if ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1; then
-              log "Network ready"
+      log "Waiting for network interface..."
+      
+      # Wait for network interface to be up (not necessarily internet)
+      for i in {1..30}; do
+          if ip link show eth0 | grep -q "state UP" || ip link show wlan0 | grep -q "state UP"; then
+              log "Network interface ready"
               break
           fi
           sleep 2
       done
-
-      if ! ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1; then
-          log "ERROR: Network not available"
-          exit 1
+      
+      # Try to get internet connectivity (optional - SoftAP can work without internet)
+      log "Checking internet connectivity..."
+      INTERNET_AVAILABLE=false
+      for i in {1..10}; do
+          if ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1; then
+              log "Internet connectivity available"
+              INTERNET_AVAILABLE=true
+              break
+          fi
+          sleep 2
+      done
+      
+      if [ "$INTERNET_AVAILABLE" = "false" ]; then
+          log "WARNING: No internet connectivity detected"
+          log "This is OK - SoftAP will start for WiFi configuration"
+          log "Setup script will continue - some features may require internet later"
       fi
 
       log "Downloading setup script and repository..."
@@ -70,11 +84,27 @@ write_files:
       mkdir -p "$APP_DIR"
       cd "$APP_DIR"
 
-      # Download setup script
-      curl -fsSL "$SETUP_SCRIPT_URL" -o setup_script || {
-          log "ERROR: Failed to download setup script"
-          exit 1
-      }
+      # Download setup script (retry logic for network issues)
+      log "Downloading setup script from: $SETUP_SCRIPT_URL"
+      DOWNLOAD_SUCCESS=false
+      for attempt in {1..5}; do
+          if curl -fsSL "$SETUP_SCRIPT_URL" -o setup_script; then
+              DOWNLOAD_SUCCESS=true
+              log "Setup script downloaded successfully"
+              break
+          else
+              log "Download attempt $attempt failed, retrying in 5 seconds..."
+              sleep 5
+          fi
+      done
+      
+      if [ "$DOWNLOAD_SUCCESS" = "false" ]; then
+          log "ERROR: Failed to download setup script after 5 attempts"
+          log "This may be due to network issues. SoftAP will still be available for WiFi configuration."
+          log "You can manually download and run setup_script later via SSH"
+          # Don't exit - allow SoftAP to start for WiFi configuration
+          exit 0
+      fi
 
       chmod +x setup_script
 
@@ -98,10 +128,16 @@ write_files:
       mkdir -p backend frontend
 
       log "Running setup script from repository directory..."
-      sudo ./setup_script || {
-          log "ERROR: Setup script failed"
-          exit 1
-      }
+      log "Note: This may take 15-30 minutes depending on internet speed"
+      
+      # Run setup script (don't exit on failure - allow SoftAP to start)
+      if sudo ./setup_script; then
+          log "Setup script completed successfully"
+      else
+          log "WARNING: Setup script encountered errors"
+          log "Some features may not be available, but SoftAP will still work"
+          log "Check logs and retry setup_script manually if needed"
+      fi
 
       touch "$STATE_FILE"
 

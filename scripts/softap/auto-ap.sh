@@ -12,7 +12,25 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOFTAP_SCRIPT="${SCRIPT_DIR}/setup-softap.sh"
-WIFI_SETUP_SERVER="/home/cbridge/C-Bridge-Production/scripts/softap/wifi-setup-server.js"
+
+# Find wifi-setup-server.js dynamically (works regardless of user/home directory)
+# Try multiple common locations
+WIFI_SETUP_SERVER=""
+for path in \
+  "${SCRIPT_DIR}/wifi-setup-server.js" \
+  "/home/user1/C-Bridge-Production/scripts/softap/wifi-setup-server.js" \
+  "/home/cbridge/C-Bridge-Production/scripts/softap/wifi-setup-server.js" \
+  "$(find /home -name "wifi-setup-server.js" -path "*/scripts/softap/wifi-setup-server.js" 2>/dev/null | head -1)"; do
+    if [ -f "$path" ]; then
+        WIFI_SETUP_SERVER="$path"
+        break
+    fi
+done
+
+# Fallback to same directory as this script
+if [ -z "$WIFI_SETUP_SERVER" ]; then
+    WIFI_SETUP_SERVER="${SCRIPT_DIR}/wifi-setup-server.js"
+fi
 LOG_FILE="/var/log/cbridge-auto-ap.log"
 STATE_FILE="/var/lib/cbridge/wifi-configured"
 CHECK_INTERVAL=30  # seconds

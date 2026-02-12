@@ -1,12 +1,14 @@
 [Unit]
 Description=C-Bridge Setup Access Point Controller
-Documentation=file:///home/cbridge/C-Bridge-Production/scripts/softap/README.md
+Documentation=file:///home/user1/C-Bridge-Production/scripts/softap/README.md
 After=network.target NetworkManager.service
 Wants=network.target
 
 [Service]
 Type=simple
-ExecStart=/home/cbridge/C-Bridge-Production/scripts/softap/auto-ap.sh run
+# Path will be updated by setup_script during installation to actual location
+# Placeholder - setup_script will replace this with actual path
+ExecStart=/home/user1/C-Bridge-Production/scripts/softap/auto-ap.sh run
 # Continuously monitor WiFi connection and internet connectivity
 # Automatically starts SoftAP when WiFi client mode disconnects or loses internet
 Restart=always
